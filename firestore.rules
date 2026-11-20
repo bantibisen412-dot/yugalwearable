@@ -1,0 +1,438 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Pillar 1 / Safety Net: Global Default-Deny Catch-All
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // =========================================================================
+    // Phase 3: Reusable Hardened Global Helpers
+    // =========================================================================
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedUser() {
+      return isSignedIn() && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isVerifiedUser() && request.auth.uid == uid;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidMood(val) {
+      return val is string && val in ['Calm', 'Missing You', 'Unwinding', 'Traveling', 'Deep Focus', 'Celebrating'];
+    }
+
+    // =========================================================================
+    // Validation Blueprints (Pillar 2: Anti-Update-Gap)
+    // =========================================================================
+
+    function isValidUser(data, userId) {
+      return data.keys().hasAll([
+          'uid',
+          'displayName',
+          'email',
+          'photoURL',
+          'referralCode',
+          'activePairId',
+          'mood',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'uid',
+          'displayName',
+          'email',
+          'photoURL',
+          'referralCode',
+          'activePairId',
+          'mood',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.uid is string && data.uid == userId && data.uid == request.auth.uid && isValidId(data.uid)
+        && data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 80
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 160
+        && data.email == request.auth.token.email
+        && data.photoURL is string && data.photoURL.size() >= 0 && data.photoURL.size() <= 500
+        && data.referralCode is string && data.referralCode.size() >= 6 && data.referralCode.size() <= 20
+        && data.referralCode.matches('^YGL-[A-Z0-9]{4,12}$')
+        && data.activePairId is string && data.activePairId.size() >= 0 && data.activePairId.size() <= 128
+        && data.activePairId.matches('^(|[a-zA-Z0-9_\\-]+)$')
+        && isValidMood(data.mood)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidPair(data) {
+      return data.keys().hasAll([
+          'pairCode',
+          'ownerId',
+          'ownerName',
+          'ownerMood',
+          'partnerId',
+          'partnerName',
+          'partnerMood',
+          'status',
+          'touchCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'pairCode',
+          'ownerId',
+          'ownerName',
+          'ownerMood',
+          'partnerId',
+          'partnerName',
+          'partnerMood',
+          'status',
+          'touchCount',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.pairCode is string && data.pairCode.size() >= 8 && data.pairCode.size() <= 12
+        && data.pairCode.matches('^[A-Z0-9]{8,12}$')
+        && isValidId(data.ownerId)
+        && data.ownerName is string && data.ownerName.size() >= 1 && data.ownerName.size() <= 60
+        && isValidMood(data.ownerMood)
+        && data.partnerId is string && data.partnerId.size() >= 0 && data.partnerId.size() <= 128
+        && data.partnerId.matches('^(|[a-zA-Z0-9_\\-]+)$')
+        && data.partnerName is string && data.partnerName.size() >= 0 && data.partnerName.size() <= 60
+        && isValidMood(data.partnerMood)
+        && data.status is string && data.status in ['open', 'paired', 'archived']
+        && data.touchCount is int && data.touchCount >= 0 && data.touchCount <= 1000000
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidTouch(data, pairId) {
+      return data.keys().hasAll([
+          'pairId',
+          'ownerId',
+          'partnerId',
+          'senderId',
+          'senderName',
+          'type',
+          'intensity',
+          'durationMs',
+          'bpm',
+          'note',
+          'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'pairId',
+          'ownerId',
+          'partnerId',
+          'senderId',
+          'senderName',
+          'type',
+          'intensity',
+          'durationMs',
+          'bpm',
+          'note',
+          'createdAt'
+        ])
+        && data.pairId is string && data.pairId == pairId && isValidId(data.pairId)
+        && isValidId(data.ownerId)
+        && data.partnerId is string && data.partnerId.size() >= 0 && data.partnerId.size() <= 128
+        && data.partnerId.matches('^(|[a-zA-Z0-9_\\-]+)$')
+        && data.senderId is string && data.senderId == request.auth.uid && isValidId(data.senderId)
+        && data.senderName is string && data.senderName.size() >= 1 && data.senderName.size() <= 60
+        && data.type is string && data.type in ['squeeze', 'heartbeat', 'double_tap', 'goodnight', 'warm_pulse']
+        && data.intensity is int && data.intensity >= 1 && data.intensity <= 100
+        && data.durationMs is int && data.durationMs >= 150 && data.durationMs <= 6000
+        && data.bpm is int && ((data.type == 'heartbeat' && data.bpm >= 45 && data.bpm <= 180) || (data.type != 'heartbeat' && data.bpm == 0))
+        && data.note is string && data.note.size() >= 0 && data.note.size() <= 120
+        && data.createdAt is timestamp;
+    }
+
+    function isValidPreorderPricing(data) {
+      let basePrice = 12999;
+      let accessoryPrice = data.includeAccessoryPack ? 2499 : 0;
+      let hasReferral = data.referralCodeApplied.size() > 0;
+      let expectedDiscount = (data.includeAccessoryPack && hasReferral) ? 1500 : 0;
+      return data.discountInr == expectedDiscount
+        && data.totalInr == (basePrice + accessoryPrice - expectedDiscount);
+    }
+
+    function isValidPreorder(data) {
+      return data.keys().hasAll([
+          'orderNumber',
+          'userId',
+          'customerName',
+          'customerEmail',
+          'productId',
+          'productName',
+          'finish',
+          'sizePrimary',
+          'sizePartner',
+          'engraving',
+          'includeAccessoryPack',
+          'referralCodeApplied',
+          'discountInr',
+          'totalInr',
+          'paymentPlan',
+          'shippingCity',
+          'shippingRegion',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'orderNumber',
+          'userId',
+          'customerName',
+          'customerEmail',
+          'productId',
+          'productName',
+          'finish',
+          'sizePrimary',
+          'sizePartner',
+          'engraving',
+          'includeAccessoryPack',
+          'referralCodeApplied',
+          'discountInr',
+          'totalInr',
+          'paymentPlan',
+          'shippingCity',
+          'shippingRegion',
+          'status',
+          'createdAt',
+          'updatedAt'
+        ])
+        && data.orderNumber is string && data.orderNumber.size() == 10 && data.orderNumber.matches('^YGL-[A-Z0-9]{6}$')
+        && data.userId is string && data.userId == request.auth.uid && isValidId(data.userId)
+        && data.customerName is string && data.customerName.size() >= 1 && data.customerName.size() <= 80
+        && data.customerEmail is string && data.customerEmail.size() >= 3 && data.customerEmail.size() <= 160
+        && data.customerEmail == request.auth.token.email
+        && data.productId is string && data.productId in ['yugal-halo-pair', 'yugal-band-pair']
+        && data.productName is string && data.productName.size() >= 1 && data.productName.size() <= 80
+        && data.finish is string && data.finish in ['Obsidian Ceramic', 'Brushed Titanium Steel']
+        && data.sizePrimary is string && data.sizePrimary.size() >= 1 && data.sizePrimary.size() <= 24
+        && data.sizePartner is string && data.sizePartner.size() >= 1 && data.sizePartner.size() <= 24
+        && data.engraving is string && data.engraving.size() >= 0 && data.engraving.size() <= 16
+        && data.includeAccessoryPack is bool
+        && data.referralCodeApplied is string && data.referralCodeApplied.size() >= 0 && data.referralCodeApplied.size() <= 20
+        && data.referralCodeApplied.matches('^(|YGL-[A-Z0-9]{4,12})$')
+        && data.discountInr is int && data.discountInr in [0, 1500]
+        && data.totalInr is int && data.totalInr >= 12999 && data.totalInr <= 15498
+        && isValidPreorderPricing(data)
+        && data.paymentPlan is string && data.paymentPlan in ['deposit_1500', 'full_12999']
+        && data.shippingCity is string && data.shippingCity.size() >= 2 && data.shippingCity.size() <= 80
+        && data.shippingRegion is string && data.shippingRegion in ['India', 'United States']
+        && data.status is string && data.status in ['reserved', 'cancelled']
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    // =========================================================================
+    // Collection 1: /users/{userId} (PII Strictly Isolated to Owner)
+    // =========================================================================
+    match /users/{userId} {
+      allow get: if isValidId(userId) && isOwner(userId);
+      allow list: if false;
+
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming(), userId)
+        && incoming().uid == existing().uid
+        && incoming().email == existing().email
+        && incoming().referralCode == existing().referralCode
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action: Update display name, mood, photo, or active pair link
+          incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'photoURL', 'activePairId', 'mood', 'updatedAt'])
+        );
+
+      allow delete: if false;
+    }
+
+    // =========================================================================
+    // Collection 2: /pairs/{pairId} (Shared Couple Haptic Channel - No PII)
+    // =========================================================================
+    match /pairs/{pairId} {
+      allow get: if isVerifiedUser()
+        && isValidId(pairId)
+        && (
+          resource == null
+          || existing().ownerId == request.auth.uid
+          || existing().partnerId == request.auth.uid
+          || (existing().status == 'open' && existing().partnerId == '')
+        );
+
+      allow list: if isVerifiedUser()
+        && (existing().ownerId == request.auth.uid || existing().partnerId == request.auth.uid);
+
+      allow create: if isVerifiedUser()
+        && isValidId(pairId)
+        && isValidPair(incoming())
+        && pairId == 'pair_' + incoming().pairCode
+        && incoming().ownerId == request.auth.uid
+        && incoming().partnerId == ''
+        && incoming().partnerName == ''
+        && incoming().status == 'open'
+        && incoming().touchCount == 0
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(pairId)
+        && isValidPair(incoming())
+        && existing().status != 'archived'
+        && incoming().pairCode == existing().pairCode
+        && incoming().ownerId == existing().ownerId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Partner joins an open pair using secret pairId
+          (
+            existing().status == 'open'
+            && existing().partnerId == ''
+            && existing().ownerId != request.auth.uid
+            && incoming().partnerId == request.auth.uid
+            && incoming().partnerName.size() >= 1
+            && incoming().status == 'paired'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['partnerId', 'partnerName', 'partnerMood', 'status', 'updatedAt'])
+          )
+          ||
+          // Action 2: Owner updates their presence mood or name
+          (
+            existing().ownerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['ownerName', 'ownerMood', 'updatedAt'])
+          )
+          ||
+          // Action 3: Partner updates their presence mood or name
+          (
+            existing().partnerId == request.auth.uid
+            && incoming().diff(existing()).affectedKeys().hasOnly(['partnerName', 'partnerMood', 'updatedAt'])
+          )
+          ||
+          // Action 4: Member increments touchCount atomically with a new touch
+          (
+            (existing().ownerId == request.auth.uid || existing().partnerId == request.auth.uid)
+            && incoming().touchCount == existing().touchCount + 1
+            && incoming().diff(existing()).affectedKeys().hasOnly(['touchCount', 'updatedAt'])
+          )
+          ||
+          // Action 5: Owner archives the pair (terminal state)
+          (
+            existing().ownerId == request.auth.uid
+            && incoming().status == 'archived'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+
+      // =======================================================================
+      // Subcollection: /pairs/{pairId}/touches/{touchId} (Master Gate + Atomic)
+      // =======================================================================
+      match /touches/{touchId} {
+        allow get: if isVerifiedUser()
+          && isValidId(pairId)
+          && isValidId(touchId)
+          && (
+            get(/databases/$(database)/documents/pairs/$(pairId)).data.ownerId == request.auth.uid
+            || get(/databases/$(database)/documents/pairs/$(pairId)).data.partnerId == request.auth.uid
+          );
+
+        // Pillar 8: Secure list query without get() lookups
+        allow list: if isVerifiedUser()
+          && (
+            existing().ownerId == request.auth.uid
+            || existing().partnerId == request.auth.uid
+            || existing().senderId == request.auth.uid
+          );
+
+        allow create: if isVerifiedUser()
+          && isValidId(pairId)
+          && isValidId(touchId)
+          && isValidTouch(incoming(), pairId)
+          && incoming().createdAt == request.time
+          && exists(/databases/$(database)/documents/pairs/$(pairId))
+          && get(/databases/$(database)/documents/pairs/$(pairId)).data.status != 'archived'
+          && (
+            get(/databases/$(database)/documents/pairs/$(pairId)).data.ownerId == request.auth.uid
+            || get(/databases/$(database)/documents/pairs/$(pairId)).data.partnerId == request.auth.uid
+          )
+          && incoming().ownerId == get(/databases/$(database)/documents/pairs/$(pairId)).data.ownerId
+          && incoming().partnerId == get(/databases/$(database)/documents/pairs/$(pairId)).data.partnerId
+          // Pillar 7: Atomicity guarantee that parent touchCount incremented in same batch
+          && getAfter(/databases/$(database)/documents/pairs/$(pairId)).data.touchCount
+             == get(/databases/$(database)/documents/pairs/$(pairId)).data.touchCount + 1;
+
+        allow update: if false;
+        allow delete: if false;
+      }
+    }
+
+    // =========================================================================
+    // Collection 3: /preorders/{orderId} (Private Hardware Reservations)
+    // =========================================================================
+    match /preorders/{orderId} {
+      allow get: if isVerifiedUser()
+        && isValidId(orderId)
+        && existing().userId == request.auth.uid;
+
+      allow list: if isVerifiedUser()
+        && existing().userId == request.auth.uid;
+
+      allow create: if isVerifiedUser()
+        && isValidId(orderId)
+        && isValidPreorder(incoming())
+        && incoming().status == 'reserved'
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+
+      allow update: if isVerifiedUser()
+        && isValidId(orderId)
+        && isValidPreorder(incoming())
+        && existing().userId == request.auth.uid
+        && existing().status != 'cancelled'
+        && incoming().orderNumber == existing().orderNumber
+        && incoming().userId == existing().userId
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && (
+          // Action 1: Cancel reservation (terminal state)
+          (
+            incoming().status == 'cancelled'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])
+          )
+          ||
+          // Action 2: Update sizing, engraving, or shipping city before shipment
+          (
+            incoming().status == 'reserved'
+            && incoming().diff(existing()).affectedKeys().hasOnly(['sizePrimary', 'sizePartner', 'engraving', 'shippingCity', 'updatedAt'])
+          )
+        );
+
+      allow delete: if false;
+    }
+  }
+}

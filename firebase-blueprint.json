@@ -1,0 +1,365 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "Private profile for an authenticated Yugal Wearables user including PII (email), personal referral code, mood, and active pair link.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Firebase Auth UID of the user."
+        },
+        "displayName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "User display name from Google profile or custom edit."
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "Private user email address isolated to owner reads."
+        },
+        "photoURL": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Optional Google profile avatar URL."
+        },
+        "referralCode": {
+          "type": "string",
+          "minLength": 6,
+          "maxLength": 20,
+          "pattern": "^YGL-[A-Z0-9]{4,12}$",
+          "description": "Unique early-adopter referral code for INR 1,500 accessory credit."
+        },
+        "activePairId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^(|[a-zA-Z0-9_\\-]+)$",
+          "description": "Currently connected pair document ID or empty string."
+        },
+        "mood": {
+          "type": "string",
+          "enum": ["Calm", "Missing You", "Unwinding", "Traveling", "Deep Focus", "Celebrating"],
+          "description": "Current emotional presence state."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of profile creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last profile update."
+        }
+      },
+      "required": ["uid", "displayName", "email", "photoURL", "referralCode", "activePairId", "mood", "createdAt", "updatedAt"]
+    },
+    "CouplePair": {
+      "title": "CouplePair",
+      "description": "Shared real-time haptic channel between two partners (or solo practice before partner joins). Contains no PII.",
+      "type": "object",
+      "properties": {
+        "pairCode": {
+          "type": "string",
+          "minLength": 8,
+          "maxLength": 12,
+          "pattern": "^[A-Z0-9]{8,12}$",
+          "description": "Shareable secret invite code used by partner to join."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the partner who created the pair."
+        },
+        "ownerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "First name or display label of the pair creator."
+        },
+        "ownerMood": {
+          "type": "string",
+          "enum": ["Calm", "Missing You", "Unwinding", "Traveling", "Deep Focus", "Celebrating"],
+          "description": "Current emotional status of owner."
+        },
+        "partnerId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^(|[a-zA-Z0-9_\\-]+)$",
+          "description": "UID of the second partner once joined, or empty string when open."
+        },
+        "partnerName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 60,
+          "description": "First name or display label of the second partner."
+        },
+        "partnerMood": {
+          "type": "string",
+          "enum": ["Calm", "Missing You", "Unwinding", "Traveling", "Deep Focus", "Celebrating"],
+          "description": "Current emotional status of the second partner."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["open", "paired", "archived"],
+          "description": "Lifecycle status of the pair channel. Archived is terminal."
+        },
+        "touchCount": {
+          "type": "integer",
+          "description": "Total synchronized haptic touch and heartbeat events."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of pair creation."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last pair state update."
+        }
+      },
+      "required": ["pairCode", "ownerId", "ownerName", "ownerMood", "partnerId", "partnerName", "partnerMood", "status", "touchCount", "createdAt", "updatedAt"]
+    },
+    "HapticTouch": {
+      "title": "HapticTouch",
+      "description": "Real-time tactile touch, gentle squeeze, or heartbeat rhythm event exchanged inside a CouplePair.",
+      "type": "object",
+      "properties": {
+        "pairId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Parent pair document ID."
+        },
+        "ownerId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Denormalized pair owner UID for secure list queries without get()."
+        },
+        "partnerId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "pattern": "^(|[a-zA-Z0-9_\\-]+)$",
+          "description": "Denormalized pair partner UID for secure list queries without get()."
+        },
+        "senderId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "UID of the partner who sent this haptic signal."
+        },
+        "senderName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Display name of the sender."
+        },
+        "type": {
+          "type": "string",
+          "enum": ["squeeze", "heartbeat", "double_tap", "goodnight", "warm_pulse"],
+          "description": "Tactile waveform pattern transmitted to the LRA actuator."
+        },
+        "intensity": {
+          "type": "integer",
+          "description": "Haptic pressure intensity from 1 to 100."
+        },
+        "durationMs": {
+          "type": "integer",
+          "description": "Duration of sensation in milliseconds (150 to 6000)."
+        },
+        "bpm": {
+          "type": "integer",
+          "description": "Heart rate BPM (0 when non-heartbeat, or 45 to 180)."
+        },
+        "note": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 120,
+          "description": "Optional brief whispered note accompanying the touch."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of touch transmission."
+        }
+      },
+      "required": ["pairId", "ownerId", "partnerId", "senderId", "senderName", "type", "intensity", "durationMs", "bpm", "note", "createdAt"]
+    },
+    "PreOrder": {
+      "title": "PreOrder",
+      "description": "D2C hardware pre-order reservation for a Yugal Wearables pair. Contains private customer shipping details.",
+      "type": "object",
+      "properties": {
+        "orderNumber": {
+          "type": "string",
+          "minLength": 10,
+          "maxLength": 10,
+          "pattern": "^YGL-[A-Z0-9]{6}$",
+          "description": "Human-readable order confirmation number."
+        },
+        "userId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$",
+          "description": "Owner Firebase Auth UID."
+        },
+        "customerName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Recipient full name."
+        },
+        "customerEmail": {
+          "type": "string",
+          "format": "email",
+          "minLength": 3,
+          "maxLength": 160,
+          "description": "Private customer email for receipt."
+        },
+        "productId": {
+          "type": "string",
+          "enum": ["yugal-halo-pair", "yugal-band-pair"],
+          "description": "Selected wearable pair SKU."
+        },
+        "productName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Display name of the selected wearable pair."
+        },
+        "finish": {
+          "type": "string",
+          "enum": ["Obsidian Ceramic", "Brushed Titanium Steel"],
+          "description": "Jewelry-grade casing finish."
+        },
+        "sizePrimary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "Primary wearer ring/wrist size."
+        },
+        "sizePartner": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 24,
+          "description": "Partner wearer ring/wrist size."
+        },
+        "engraving": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 16,
+          "description": "Optional inner-band custom engraving."
+        },
+        "includeAccessoryPack": {
+          "type": "boolean",
+          "description": "Whether Duo Magnetic Charging Dock & Spare Bands pack (INR 2,499) is included."
+        },
+        "referralCodeApplied": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 20,
+          "pattern": "^(|YGL-[A-Z0-9]{4,12})$",
+          "description": "Optional referral code granting INR 1,500 off accessories."
+        },
+        "discountInr": {
+          "type": "integer",
+          "description": "Applied discount in INR (0 or 1500)."
+        },
+        "totalInr": {
+          "type": "integer",
+          "description": "Total order value in INR."
+        },
+        "paymentPlan": {
+          "type": "string",
+          "enum": ["deposit_1500", "full_12999"],
+          "description": "Deposit reservation or full pre-order commitment."
+        },
+        "shippingCity": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 80,
+          "description": "Delivery city."
+        },
+        "shippingRegion": {
+          "type": "string",
+          "enum": ["India", "United States"],
+          "description": "Target launch geography."
+        },
+        "status": {
+          "type": "string",
+          "enum": ["reserved", "cancelled"],
+          "description": "Order lifecycle status. Cancelled is terminal."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of pre-order submission."
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server timestamp of last status change."
+        }
+      },
+      "required": [
+        "orderNumber",
+        "userId",
+        "customerName",
+        "customerEmail",
+        "productId",
+        "productName",
+        "finish",
+        "sizePrimary",
+        "sizePartner",
+        "engraving",
+        "includeAccessoryPack",
+        "referralCodeApplied",
+        "discountInr",
+        "totalInr",
+        "paymentPlan",
+        "shippingCity",
+        "shippingRegion",
+        "status",
+        "createdAt",
+        "updatedAt"
+      ]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Private user account profiles with PII isolated to owner only."
+    },
+    "/pairs/{pairId}": {
+      "schema": { "$ref": "#/entities/CouplePair" },
+      "description": "Shared real-time haptic pairing channels between two partners."
+    },
+    "/pairs/{pairId}/touches/{touchId}": {
+      "schema": { "$ref": "#/entities/HapticTouch" },
+      "description": "Real-time tactile touches and heartbeat rhythms exchanged within a pair."
+    },
+    "/preorders/{orderId}": {
+      "schema": { "$ref": "#/entities/PreOrder" },
+      "description": "Private customer hardware pre-order reservations."
+    }
+  }
+}

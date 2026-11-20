@@ -1,0 +1,6 @@
+{
+  "name": "Yugal Wearables",
+  "description": "Connected jewelry-grade smart rings and bracelets for long-distance couples to share real-time haptic squeezes, heartbeat rhythms, and emotional presence without screen time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
